@@ -5,6 +5,7 @@ pub mod bash;
 pub mod glob;
 pub mod grep;
 pub mod read;
+pub mod test_verify;
 pub mod write;
 
 #[derive(Debug, thiserror::Error)]
@@ -64,5 +65,6 @@ pub fn default_tools() -> ToolRegistry {
     registry.register(Box::new(bash::BashExecTool));
     registry.register(Box::new(grep::SearchCodeTool));
     registry.register(Box::new(glob::ListFilesTool));
+    registry.register(Box::new(test_verify::TestVerifyTool));
     registry
 }

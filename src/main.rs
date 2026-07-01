@@ -41,6 +41,10 @@ struct Cli {
     /// DeepSeek API key (or set DEEPSEEK_API_KEY env var)
     #[arg(long)]
     api_key: Option<String>,
+
+    /// Skip human-in-the-loop prompts (auto-approve all tool calls)
+    #[arg(long)]
+    auto: bool,
 }
 
 #[tokio::main]
@@ -70,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
     ));
     let tools = tools::default_tools();
 
-    let mut agent = Agent::new(client, tools, &config);
+    let mut agent = Agent::new(client, tools, &config, cli.auto);
     let result = agent.run(&task).await?;
 
     println!("\n{result}");

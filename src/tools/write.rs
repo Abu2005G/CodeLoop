@@ -12,7 +12,7 @@ impl Tool for WriteFileTool {
     }
 
     fn description(&self) -> &str {
-        "Write or overwrite a file with the given content."
+        "Write or overwrite a file. Shows a diff summary for existing files."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -46,6 +46,8 @@ impl Tool for WriteFileTool {
                 ws.join(path)
             };
 
+            let old_content = fs::read_to_string(&full_path).ok();
+
             if let Some(parent) = full_path.parent() {
                 fs::create_dir_all(parent)
                     .map_err(|e| ToolError::Message(format!("Cannot create dir: {e}")))?;
@@ -53,9 +55,77 @@ impl Tool for WriteFileTool {
             fs::write(&full_path, content)
                 .map_err(|e| ToolError::Message(format!("Cannot write {path}: {e}")))?;
 
-            Ok(format!("Wrote {} bytes to {path}", content.len()))
+            let mut result = format!("Wrote {} bytes to {path}", content.len());
+
+            if let Some(old) = old_content {
+                result.push_str(&diff_summary(&old, content));
+            } else {
+                let lines = content.lines().count();
+                result.push_str(&format!(
+                    "\n[D] New file: {lines} lines, {} bytes",
+                    content.len()
+                ));
+            }
+
+            Ok(result)
         })
         .await
         .map_err(|e| ToolError::Message(format!("Task panicked: {e}")))?
     }
+}
+
+fn diff_summary(old: &str, new: &str) -> String {
+    let old_lines: Vec<&str> = old.lines().collect();
+    let new_lines: Vec<&str> = new.lines().collect();
+
+    if old_lines == new_lines {
+        return "\n[D] No changes detected.".to_string();
+    }
+
+    let old_set: std::collections::HashSet<&&str> = old_lines.iter().collect();
+    let new_set: std::collections::HashSet<&&str> = new_lines.iter().collect();
+
+    let added = new_lines.iter().filter(|l| !old_set.contains(l)).count();
+    let removed = old_lines.iter().filter(|l| !new_set.contains(l)).count();
+
+    let mut summary = format!(
+        "\n[D] {} → {} lines (+{}, -{})",
+        old_lines.len(),
+        new_lines.len(),
+        added,
+        removed,
+    );
+
+    // Show first few added/removed lines as a preview
+    if added > 0 {
+        let previews: Vec<&str> = new_lines
+            .iter()
+            .filter(|l| !old_set.contains(*l))
+            .take(3)
+            .copied()
+            .collect();
+        if !previews.is_empty() {
+            summary.push_str("\n[D] Added:");
+            for p in previews {
+                summary.push_str(&format!("\n    + {p}"));
+            }
+        }
+    }
+
+    if removed > 0 {
+        let previews: Vec<&str> = old_lines
+            .iter()
+            .filter(|l| !new_set.contains(*l))
+            .take(3)
+            .copied()
+            .collect();
+        if !previews.is_empty() {
+            summary.push_str("\n[D] Removed:");
+            for p in previews {
+                summary.push_str(&format!("\n    - {p}"));
+            }
+        }
+    }
+
+    summary
 }
